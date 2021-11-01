@@ -62,10 +62,7 @@ assert_build_log() {
   cached_tarball "yaml-0.1.6"
   cached_tarball "Python-3.6.2"
 
-  # pyenv/pyenv#1026
-  stub uname false false
-
-  stub uname '-s : echo Linux' '-s : echo Linux'
+  for i in {1..4}; do stub uname '-s : echo Linux'; done
   stub brew false
   stub_make_install
   stub_make_install
@@ -92,10 +89,7 @@ OUT
   cached_tarball "yaml-0.1.6"
   cached_tarball "Python-3.6.2"
 
-  # pyenv/pyenv#1026
-  stub uname false false
-
-  stub uname '-s : echo Linux' '-s : echo Linux'
+  for i in {1..4}; do stub uname '-s : echo Linux'; done
   stub brew false
   stub_make_install
   stub_make_install
@@ -154,23 +148,50 @@ make install
 OUT
 }
 
+@test "homebrew with uncommon prefix is added to search path" {
+  cached_tarball "Python-3.6.2"
+
+  BREW_PREFIX="$TMP/homebrew-prefix"
+  mkdir -p "$BREW_PREFIX"
+
+  for i in {1..4}; do stub uname '-s : echo Darwin'; done
+  for i in {1..2}; do stub sw_vers '-productVersion : echo 1010'; done
+  stub brew "--prefix : echo '$BREW_PREFIX'" false
+  stub_make_install
+
+  run_inline_definition <<DEF
+install_package "Python-3.6.2" "http://python.org/ftp/python/3.6.2/Python-3.6.2.tar.gz"
+DEF
+  assert_success
+
+  unstub sw_vers
+  unstub uname
+  unstub make
+
+  assert_build_log <<OUT
+Python-3.6.2: CPPFLAGS="-I${TMP}/install/include -I$BREW_PREFIX/include" LDFLAGS="-L${TMP}/install/lib -L$BREW_PREFIX/lib"
+Python-3.6.2: --prefix=$INSTALL_ROOT --libdir=$INSTALL_ROOT/lib
+make -j 2
+make install
+OUT
+}
+
 @test "yaml is linked from Homebrew" {
   cached_tarball "Python-3.6.2"
 
   brew_libdir="$TMP/homebrew-yaml"
   mkdir -p "$brew_libdir"
 
-  # pyenv/pyenv#1026
-  stub uname false false
-
-  stub uname '-s : echo Linux'
-  stub uname '-s : echo Darwin'
-  stub brew "--prefix libyaml : echo '$brew_libdir'" false
+  for i in {1..4}; do stub uname '-s : echo Darwin'; done
+  for i in {1..2}; do stub sw_vers '-productVersion : echo 1010'; done
+  stub brew "--prefix libyaml : echo '$brew_libdir'"
+  for i in {1..4}; do stub brew false; done
   stub_make_install
 
   install_fixture definitions/needs-yaml
   assert_success
 
+  unstub sw_vers
   unstub uname
   unstub brew
   unstub make
@@ -188,11 +209,10 @@ OUT
 
   readline_libdir="$TMP/homebrew-readline"
   mkdir -p "$readline_libdir"
-
-  # pyenv/pyenv#1026
-  stub uname false false
-
+  stub uname false
+  for i in {1..2}; do stub brew false; done
   stub brew "--prefix readline : echo '$readline_libdir'"
+  stub brew false
   stub_make_install
 
   run_inline_definition <<DEF
@@ -222,7 +242,7 @@ OUT
   # pyenv/pyenv#1026
   stub uname false false
 
-  stub brew
+  for i in {1..3}; do stub brew false; done
   stub_make_install
 
   export PYTHON_CONFIGURE_OPTS="CPPFLAGS=-I$readline_libdir/include LDFLAGS=-L$readline_libdir/lib"
@@ -237,6 +257,65 @@ DEF
   assert_build_log <<OUT
 Python-3.6.2: CPPFLAGS="-I${TMP}/install/include " LDFLAGS="-L${TMP}/install/lib "
 Python-3.6.2: --prefix=$INSTALL_ROOT CPPFLAGS=-I$readline_libdir/include LDFLAGS=-L$readline_libdir/lib --libdir=$INSTALL_ROOT/lib
+make -j 2
+make install
+OUT
+}
+
+@test "tcl-tk is linked from Homebrew" {
+  cached_tarball "Python-3.6.2"
+  tcl_tk_version=8.6
+  tcl_tk_libdir="$TMP/homebrew-tcl-tk"
+  mkdir -p "$tcl_tk_libdir/lib"
+  echo "TCL_VERSION='$tcl_tk_version'" >>"$tcl_tk_libdir/lib/tclConfig.sh"
+
+  stub uname false
+  stub brew false
+  for i in {1..2}; do stub brew "--prefix tcl-tk : echo '$tcl_tk_libdir'"; done
+  for i in {1..2}; do stub brew false; done
+  stub_make_install
+
+  run_inline_definition <<DEF
+install_package "Python-3.6.2" "http://python.org/ftp/python/3.6.2/Python-3.6.2.tar.gz"
+DEF
+  assert_success
+
+  unstub brew
+  unstub make
+
+  assert_build_log <<OUT
+Python-3.6.2: CPPFLAGS="-I${TMP}/install/include " LDFLAGS="-L${TMP}/install/lib "
+Python-3.6.2: --prefix=${TMP}/install --libdir=${TMP}/install/lib --with-tcltk-libs=-L${TMP}/homebrew-tcl-tk/lib -ltcl$tcl_tk_version -ltk$tcl_tk_version --with-tcltk-includes=-I${TMP}/homebrew-tcl-tk/include
+make -j 2
+make install
+OUT
+}
+
+@test "tcl-tk is not linked from Homebrew when explicitly defined" {
+  cached_tarball "Python-3.6.2"
+
+  # python build
+  tcl_tk_version_long="8.6.10"
+  tcl_tk_version="${tcl_tk_version_long%.*}"
+
+  # pyenv/pyenv#1026
+  stub uname false false
+
+  for i in {1..4}; do stub brew false; done
+  stub_make_install
+
+  export PYTHON_CONFIGURE_OPTS="--with-tcltk-libs='-L${TMP}/custom-tcl-tk/lib -ltcl$tcl_tk_version -ltk$tcl_tk_version'"
+  run_inline_definition <<DEF
+install_package "Python-3.6.2" "http://python.org/ftp/python/3.6.2/Python-3.6.2.tar.gz"
+DEF
+  assert_success
+
+  unstub brew
+  unstub make
+
+  assert_build_log <<OUT
+Python-3.6.2: CPPFLAGS="-I${TMP}/install/include " LDFLAGS="-L${TMP}/install/lib "
+Python-3.6.2: --prefix=$INSTALL_ROOT --libdir=$INSTALL_ROOT/lib --with-tcltk-libs=-L${TMP}/custom-tcl-tk/lib -ltcl8.6 -ltk8.6
 make -j 2
 make install
 OUT

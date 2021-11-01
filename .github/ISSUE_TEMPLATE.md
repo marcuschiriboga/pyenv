@@ -17,5 +17,14 @@ Make sure you have checked all steps below.
 - [ ] pyenv version:
 - [ ] Python version:
 - [ ] C Compiler information (e.g. gcc 7.3): 
-- [ ] Please attach verbose build log as gist
-  * You can turn on verbose debug logging using by setting `PYENV_DEBUG=1`, e.g. `env PYENV_DEBUG=1 pyenv install -v 3.6.4`
+- [ ] Please reproduce the problem with debug tracing enabled and attach the resulting output as a gist
+  * If the problem happens in a Pyenv invocation, you can turn on tracing by setting `PYENV_DEBUG=1`, e.g. `env PYENV_DEBUG=1 pyenv install -v 3.6.4`
+    * If the problem is with `pyenv install`, make sure to also enable its verbose mode (`-v`)
+  * If the problem happens outside of a Pyenv invocation, enable shell trace output like this:
+     ```sh
+     export PS4='+(${(%):-%x}:${LINENO}): ${funcstack[0]:+${funcstack[0]}(): }'  #Zsh
+     export PS4='+(${BASH_SOURCE}:${LINENO}): ${FUNCNAME[0]:+${FUNCNAME[0]}(): }'  #Bash
+     set -x
+     <reproduce the problem>
+     set +x
+     ```
